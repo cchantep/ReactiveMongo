@@ -7,3 +7,10 @@ Before:
 [error]                                        ^
 [error] one error found
 ```
+
+After adding `-P:silencer:globalFilters=...` for `.find` warning in [build.sbt](./build.sbt#L16) (and with reload/clean in SBT):
+
+```
+[info] Silencer using global filters: Use\ `find`\ with\ optional\ `projection`
+[info] Done compiling.
+```

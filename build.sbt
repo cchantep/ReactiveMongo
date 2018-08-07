@@ -10,6 +10,9 @@ libraryDependencies ++= Seq(
 
 addCompilerPlugin("com.github.ghik" %% "silencer-plugin" % silencerVersion)
 
-scalacOptions in Compile ++= Seq("-Xfatal-warnings", "-deprecation", "-P:silencer:globalFilters=bar\\ in\\ object\\ Foo;lorem")
+scalacOptions in Compile ++= Seq(
+  "-Xfatal-warnings",
+  "-deprecation",
+  "-P:silencer:globalFilters=Use\\ `find`\\ with\\ optional\\ `projection`")
 
 scalaVersion := "2.12.6"
