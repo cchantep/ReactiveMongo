@@ -472,35 +472,32 @@ abstract class GridFS[P <: SerializationPack with Singleton] @deprecated("Intern
 }
 
 object GridFS extends LowPriorityGridFS {
-  val apply = Factory
+  def apply[P <: SerializationPack with Singleton](
+    _pack: P,
+    db: DB with DBMetaCommands,
+    prefix: String)(implicit producer: GenericCollectionProducer[P, GenericCollection[P]]): GridFS[P] =
+    new GridFS(db, prefix)(producer) {
+      override lazy val pack: P = _pack
 
-  object Factory {
-    def apply[P <: SerializationPack with Singleton](
-      _pack: P,
-      db: DB with DBMetaCommands,
-      prefix: String)(implicit producer: GenericCollectionProducer[_pack.type, GenericCollection[_pack.type]]): GridFS[_pack.type] = {
-      new GridFS(db, prefix)(producer) {
-        override lazy val pack: _pack.type = _pack
+      override lazy val files = db(prefix + ".files")(producer).
+        asInstanceOf[GenericCollection[pack.type]]
 
-        override lazy val files = db(prefix + ".files")(producer)
-
-        override lazy val chunks = db(prefix + ".chunks")(producer)
-      }
+      override lazy val chunks = db(prefix + ".chunks")(producer).
+        asInstanceOf[GenericCollection[pack.type]]
     }
 
-    def apply(
-      db: DB with DBMetaCommands,
-      prefix: String): GridFS[Serialization.Pack] =
-      apply[Serialization.Pack](
-        Serialization.internalSerializationPack, db, prefix)
+  def apply(
+    db: DB with DBMetaCommands,
+    prefix: String): GridFS[Serialization.Pack] =
+    apply[Serialization.Pack](
+      Serialization.internalSerializationPack, db, prefix)
 
-    def apply(db: DB with DBMetaCommands): GridFS[Serialization.Pack] =
-      apply[Serialization.Pack](
-        Serialization.internalSerializationPack, db, prefix = "fs")
-  }
+  def apply(db: DB with DBMetaCommands): GridFS[Serialization.Pack] =
+    apply[Serialization.Pack](
+      Serialization.internalSerializationPack, db, prefix = "fs")
 }
 
-private[gridfs] trait LowPriorityGridFS {
+private[gridfs] sealed trait LowPriorityGridFS {
   @deprecated("Use `GridFS(_pack, db, prefix)`", "0.19.0")
   def apply[P <: SerializationPack with Singleton](db: DB with DBMetaCommands, prefix: String = "fs")(implicit producer: GenericCollectionProducer[P, GenericCollection[P]] = BSONCollectionProducer): GridFS[P] = new GridFS(db, prefix)(producer) {
     override lazy val pack = producer.pack

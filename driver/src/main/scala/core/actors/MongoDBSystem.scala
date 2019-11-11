@@ -195,7 +195,7 @@ trait MongoDBSystem extends Actor {
 
   /** On start or restart. */
   private def initNodeSet(): Try[NodeSet] = {
-    val seedNodeSet = NodeSet(None, None, seeds.map(seed => Node(seed, NodeStatus.Unknown, Vector.empty, Set.empty, None, ProtocolMetadata.Default)).toVector, initialAuthenticates.toSet)
+    val seedNodeSet = NodeSet(None, None, seeds.map(seed => new Node(seed, Set.empty, NodeStatus.Unknown, Vector.empty, Set.empty, _tags = Map.empty[String, String], ProtocolMetadata.Default, PingInfo(), false)).toVector, initialAuthenticates.toSet)
 
     debug(s"Initial node set: ${seedNodeSet.toShortString}")
 
@@ -867,7 +867,7 @@ trait MongoDBSystem extends Actor {
         val authenticates = ns.authenticates + authenticate
 
         ns.copy(authenticates = authenticates).updateAll {
-          case node @ Node(_, status, _, _, _, _, _, _) if status.queryable =>
+          case Node.Queryable(node) =>
             authenticateNode(node, authenticates)
 
           case node => node
@@ -1169,7 +1169,7 @@ trait MongoDBSystem extends Actor {
             val an = authenticating._copy(
               status = nodeStatus,
               pingInfo = pingInfo,
-              tags = isMaster.replicaSet.flatMap(_.tags),
+              tags = isMaster.replicaSet.map(_.tags).getOrElse(Map.empty),
               protocolMetadata = meta,
               isMongos = isMaster.isMongos)
 
@@ -1185,8 +1185,9 @@ trait MongoDBSystem extends Actor {
           _.hosts.collect {
             case host if (!prepared.nodes.exists(_.names contains host)) =>
               // Prepare node for newly discovered host in the RS
-              Node(host, NodeStatus.Uninitialized,
-                Vector.empty, Set.empty, None, ProtocolMetadata.Default)
+              new Node(host, Set.empty, NodeStatus.Uninitialized,
+                Vector.empty, Set.empty, _tags = Map.empty[String, String],
+                ProtocolMetadata.Default, PingInfo(), false)
           }
         }
 
