@@ -348,12 +348,29 @@ abstract class GridFS[P <: SerializationPack with Singleton] @deprecated("Intern
    */
   def ensureIndex()(implicit @deprecatedName(Symbol("ctx")) ec: ExecutionContext): Future[Boolean] = for {
     _ <- chunks.create(failsIfExists = false)
-    c <- chunks.indexesManager.ensure(
-      Index(List("files_id" -> Ascending, "n" -> Ascending), unique = true))
+    c <- chunks.indexesManager.ensure(Index(pack)(
+      key = List("files_id" -> Ascending, "n" -> Ascending),
+      name = None,
+      unique = true,
+      background = false,
+      dropDups = false,
+      sparse = false,
+      version = None,
+      partialFilter = None,
+      options = builder.document(Seq.empty)))
 
     _ <- files.create(failsIfExists = false)
-    f <- files.indexesManager.ensure(
-      Index(List("filename" -> Ascending, "uploadDate" -> Ascending)))
+    f <- files.indexesManager.ensure(Index(pack)(
+      key = List("filename" -> Ascending, "uploadDate" -> Ascending),
+      name = None,
+      unique = false,
+      background = false,
+      dropDups = false,
+      sparse = false,
+      version = None,
+      partialFilter = None,
+      options = builder.document(Seq.empty)))
+
   } yield (c && f)
 
   /**

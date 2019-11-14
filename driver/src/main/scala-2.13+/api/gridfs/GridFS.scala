@@ -320,12 +320,28 @@ sealed trait GridFS[P <: SerializationPack]
 
     for {
       _ <- create(chunkColl)
-      c <- indexMngr.onCollection(chunkColl.name).ensure(
-        Index(List("files_id" -> Ascending, "n" -> Ascending), unique = true))
+      c <- indexMngr.onCollection(chunkColl.name).ensure(Index(pack)(
+        key = List("files_id" -> Ascending, "n" -> Ascending),
+        name = None,
+        unique = true,
+        background = false,
+        dropDups = false,
+        sparse = false,
+        version = None, // let MongoDB decide
+        partialFilter = None,
+        options = builder.document(Seq.empty)))
 
       _ <- create(fileColl)
-      f <- indexMngr.onCollection(fileColl.name).ensure(
-        Index(List("filename" -> Ascending, "uploadDate" -> Ascending)))
+      f <- indexMngr.onCollection(fileColl.name).ensure(Index(pack)(
+        key = List("filename" -> Ascending, "uploadDate" -> Ascending),
+        name = None,
+        unique = false,
+        background = false,
+        dropDups = false,
+        sparse = false,
+        version = None, // let MongoDB decide
+        partialFilter = None,
+        options = builder.document(Seq.empty)))
     } yield (c && f)
   }
 
