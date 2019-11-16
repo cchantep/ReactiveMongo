@@ -40,6 +40,8 @@ import reactivemongo.io.netty.channel.group.{
 
 import reactivemongo.util.{ LazyLogger, SimpleRing }
 
+import reactivemongo.api.Serialization.{ internalSerializationPack => pack }
+
 import reactivemongo.core.ClientMetadata
 import reactivemongo.core.errors.GenericDriverException
 import reactivemongo.core.protocol.{
@@ -716,7 +718,7 @@ trait MongoDBSystem extends Actor {
 
       updateNodeSet(s"AuthenticationFailure(${err.info._channelId})") { ns =>
         handleAuthResponse(ns, err)(
-          Left(FailedAuthentication(cause.getMessage)))
+          Left(FailedAuthentication(pack)(cause.getMessage, None, None)))
       }
 
       ()

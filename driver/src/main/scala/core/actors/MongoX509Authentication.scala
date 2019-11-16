@@ -1,5 +1,7 @@
 package reactivemongo.core.actors
 
+import reactivemongo.api.{ BSONSerializationPack => pack }
+
 import reactivemongo.bson.lowlevel.{ DoubleField, LowLevelBsonDocReader }
 import reactivemongo.core.commands.{ FailedAuthentication, X509Authenticate }
 import reactivemongo.core.netty.ChannelBufferReadableBuffer
@@ -28,7 +30,8 @@ private[reactivemongo] trait MongoX509Authentication { system: MongoDBSystem =>
         if (failedToAuthenticate(resp)) {
           val err = s"Failed to authenticate on #${chanId} with X509 authentication. Either does not match certificate or one of the two does not exist"
 
-          handleAuthResponse(ns, resp)(Left(FailedAuthentication(err)))
+          handleAuthResponse(ns, resp)(Left(
+            FailedAuthentication(pack)(err, None, None)))
         } else {
           handleAuthResponse(ns, resp)(X509Authenticate.parseResponse(resp))
         }

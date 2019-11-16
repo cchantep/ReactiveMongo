@@ -2,6 +2,7 @@ package reactivemongo.core.actors
 
 import reactivemongo.api.{
   AuthenticationMode,
+  BSONSerializationPack => pack,
   ScramSha1Authentication,
   ScramSha256Authentication
 }
@@ -133,7 +134,8 @@ private[reactivemongo] sealed trait MongoScramAuthentication[M <: Authentication
           warn(msg, err)
 
           updateNodeSet(s"ScramNonceFailure($mechanism, $respTo)") { ns =>
-            handleAuthResponse(ns, resp)(Left(FailedAuthentication(msg)))
+            handleAuthResponse(ns, resp)(Left(
+              FailedAuthentication(pack)(msg, None, None)))
           }
 
           ()
@@ -178,7 +180,7 @@ private[reactivemongo] sealed trait MongoScramAuthentication[M <: Authentication
                   warn(msg)
 
                   handleAuthResponse(ns, resp)(
-                    Left(FailedAuthentication(msg)))
+                    Left(FailedAuthentication(pack)(msg, None, None)))
                 }
               }
             }
@@ -222,7 +224,7 @@ private[reactivemongo] sealed trait MongoScramAuthentication[M <: Authentication
                     warn(msg)
 
                     handleAuthResponse(ns, response)(
-                      Left(FailedAuthentication(msg)))
+                      Left(FailedAuthentication(pack)(msg, None, None)))
 
                   } else {
                     val negociation = ScramFinalNegociation(cid, payload)
@@ -247,7 +249,7 @@ private[reactivemongo] sealed trait MongoScramAuthentication[M <: Authentication
                   warn(msg)
 
                   handleAuthResponse(ns, response)(
-                    Left(FailedAuthentication(msg)))
+                    Left(FailedAuthentication(pack)(msg, None, None)))
 
                 }
               }
