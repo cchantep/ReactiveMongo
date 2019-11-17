@@ -1,11 +1,6 @@
 package reactivemongo.api.commands
 
-import reactivemongo.api.{
-  Serialization,
-  SerializationPack,
-  Session,
-  WriteConcern => WC
-}
+import reactivemongo.api.{ Serialization, Session, WriteConcern => WC }
 
 /**
  * Support for [[https://docs.mongodb.com/manual/reference/command/abortTransaction/ abortTransaction]] and [[https://docs.mongodb.com/manual/reference/command/commitTransaction/ commitTransaction]] commands.

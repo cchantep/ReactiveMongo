@@ -110,7 +110,8 @@ private[reactivemongo] sealed trait MongoScramAuthentication[M <: Authentication
 
   // ---
 
-  private lazy val initiateWriter = ScramInitiate.writer(pack, mechanism)
+  private lazy val initiateWriter =
+    ScramInitiate.writer[pack.type, M](pack, mechanism)
 
   protected final def sendAuthenticate(connection: Connection, nextAuth: Authenticate): Connection = {
     val start = initiate(nextAuth.user)

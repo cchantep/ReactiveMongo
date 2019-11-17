@@ -330,7 +330,7 @@ trait IsMasterCommand[P <: SerializationPack] {
     }
   }
 
-  private[api] def reader(pack: P)(implicit dr: pack.NarrowValueReader[Date], sr: pack.NarrowValueReader[String]): pack.Reader[IsMasterResult] = {
+  private[reactivemongo] def reader(pack: P)(implicit sr: pack.NarrowValueReader[String]): pack.Reader[IsMasterResult] = {
     val decoder = pack.newDecoder
 
     import decoder.{ booleanLike, int, long, string, values }
@@ -360,9 +360,9 @@ trait IsMasterCommand[P <: SerializationPack] {
         lastWrite = decoder.child(doc, "lastWrite").flatMap { ld =>
           for {
             opTime <- long(ld, "opTime")
-            lastWriteDate <- decoder.read[Date](ld, "lastWriteDate")
+            lastWriteDate <- long(ld, "lastWriteDate").map(new Date(_))
             majorityOpTime <- long(ld, "majorityOpTime")
-            majorityWriteDate <- decoder.read[Date](ld, "majorityWriteDate")
+            majorityWriteDate <- long(ld, "majorityWriteDate").map(new Date(_))
           } yield new LastWrite(
             opTime.toLong, lastWriteDate,
             majorityOpTime.toLong, majorityWriteDate)

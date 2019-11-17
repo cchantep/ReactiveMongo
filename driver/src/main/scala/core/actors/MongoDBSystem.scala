@@ -1116,13 +1116,13 @@ trait MongoDBSystem extends Actor {
     }
   }
 
-  private def onIsMaster(response: Response): Unit = {
-    // TODO: Refactor as Bison
-    import reactivemongo.api.BSONSerializationPack
-    import reactivemongo.api.commands.bson.BSONIsMasterCommandImplicits
+  private object IsMasterCommand
+    extends reactivemongo.api.commands.IsMasterCommand[Pack]
 
-    val isMaster = BSONSerializationPack.readAndDeserialize(
-      response, BSONIsMasterCommandImplicits.IsMasterResultReader)
+  private lazy val isMasterReader = IsMasterCommand.reader(pack)
+
+  private def onIsMaster(response: Response): Unit = {
+    val isMaster = pack.readAndDeserialize(response, isMasterReader)
 
     trace(s"IsMaster response document: $isMaster")
 
