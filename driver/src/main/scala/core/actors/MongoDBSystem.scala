@@ -40,7 +40,7 @@ import reactivemongo.io.netty.channel.group.{
 
 import reactivemongo.util.{ LazyLogger, SimpleRing }
 
-import reactivemongo.api.Serialization.{ internalSerializationPack => pack }
+import reactivemongo.api.Serialization
 
 import reactivemongo.core.ClientMetadata
 import reactivemongo.core.errors.GenericDriverException
@@ -81,6 +81,10 @@ import external.reactivemongo.ConnectionListener
 trait MongoDBSystem extends Actor {
   import scala.concurrent.duration._
   import Exceptions._
+
+  protected type Pack = Serialization.Pack
+
+  protected val pack: Pack = Serialization.internalSerializationPack
 
   protected final val logger =
     LazyLogger("reactivemongo.core.actors.MongoDBSystem")
@@ -1113,6 +1117,7 @@ trait MongoDBSystem extends Actor {
   }
 
   private def onIsMaster(response: Response): Unit = {
+    // TODO: Refactor as Bison
     import reactivemongo.api.BSONSerializationPack
     import reactivemongo.api.commands.bson.BSONIsMasterCommandImplicits
 

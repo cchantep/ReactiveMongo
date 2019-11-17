@@ -8,6 +8,7 @@ import reactivemongo.api.{
   ScramSha1Authentication,
   ScramSha256Authentication
 }
+import reactivemongo.api.commands.SaslPrep
 
 import reactivemongo.bson.{
   BSONBinary,

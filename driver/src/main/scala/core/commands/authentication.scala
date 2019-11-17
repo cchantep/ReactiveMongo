@@ -204,3 +204,22 @@ object FailedAuthentication extends scala.runtime.AbstractFunction2[String, Opti
     val response = doc
   }
 }
+
+private[reactivemongo] object AuthenticationResult {
+  import scala.util.control.NonFatal
+
+  def parse[P <: SerializationPack](
+    pack: P,
+    resp: Response)(reader: pack.Reader[AuthenticationResult]): Either[CommandError, SuccessfulAuthentication] = try {
+    pack.readAndDeserialize(resp, reader) match {
+      case failed: FailedAuthentication =>
+        Left(failed)
+
+      case suc: SuccessfulAuthentication =>
+        Right(suc)
+    }
+  } catch {
+    case NonFatal(error) =>
+      Left(CommandError(pack)(error.getMessage, None, None))
+  }
+}

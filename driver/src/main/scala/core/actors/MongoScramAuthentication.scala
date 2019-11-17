@@ -1,21 +1,27 @@
 package reactivemongo.core.actors
 
+import scala.util.control.NonFatal
+
 import reactivemongo.api.{
   AuthenticationMode,
-  BSONSerializationPack => pack,
+  ReadPreference,
   ScramSha1Authentication,
-  ScramSha256Authentication
+  ScramSha256Authentication,
+  SerializationPack
 }
 
 import reactivemongo.core.commands.{
   CommandError,
   FailedAuthentication,
-  ScramChallenge,
+  SuccessfulAuthentication
+}
+
+import reactivemongo.api.commands.{
+  Command,
   ScramFinalNegociation,
   ScramInitiate,
   ScramNegociation,
-  ScramStartNegociation,
-  SuccessfulAuthentication
+  ScramStartNegociation
 }
 
 import reactivemongo.core.protocol.Response
@@ -31,15 +37,14 @@ private[reactivemongo] trait MongoScramSha1Authentication
 
   val mechanism = ScramSha1Authentication
 
-  import reactivemongo.core.commands.{
+  import reactivemongo.api.commands.{
     ScramSha1Initiate,
     ScramSha1StartNegociation
   }
 
   protected def initiate(user: String) = ScramSha1Initiate(user)
 
-  protected def parseChallenge(resp: Response) =
-    ScramSha1Initiate.parseResponse(resp)
+  protected lazy val challengeReader = ScramSha1Initiate.reader[pack.type](pack)
 
   protected def startNegociation(
     user: String,
@@ -50,8 +55,6 @@ private[reactivemongo] trait MongoScramSha1Authentication
     message: String) = ScramSha1StartNegociation(user, password,
     conversationId, payload, randomPrefix, message)
 
-  protected def parseNegociation(resp: Response): ScramStartNegociation.ResType = ScramSha1StartNegociation.parseResponse(resp)
-
 }
 
 private[reactivemongo] trait MongoScramSha256Authentication
@@ -60,15 +63,15 @@ private[reactivemongo] trait MongoScramSha256Authentication
 
   val mechanism = ScramSha256Authentication
 
-  import reactivemongo.core.commands.{
+  import reactivemongo.api.commands.{
     ScramSha256Initiate,
     ScramSha256StartNegociation
   }
 
   protected def initiate(user: String) = ScramSha256Initiate(user)
 
-  protected def parseChallenge(resp: Response) =
-    ScramSha256Initiate.parseResponse(resp)
+  protected lazy val challengeReader =
+    ScramSha256Initiate.reader[pack.type](pack)
 
   protected def startNegociation(
     user: String,
@@ -79,8 +82,6 @@ private[reactivemongo] trait MongoScramSha256Authentication
     message: String) = ScramSha256StartNegociation(user, password,
     conversationId, payload, randomPrefix, message)
 
-  protected def parseNegociation(resp: Response): ScramStartNegociation.ResType = ScramSha256StartNegociation.parseResponse(resp)
-
 }
 
 // ---
@@ -88,12 +89,16 @@ private[reactivemongo] trait MongoScramSha256Authentication
 private[reactivemongo] sealed trait MongoScramAuthentication[M <: AuthenticationMode.Scram] { system: MongoDBSystem =>
   import org.apache.commons.codec.binary.Base64
 
+  protected type Pack <: SerializationPack
+
+  protected val pack: Pack
+
   protected val mechanism: M
 
   /** @param user The user name */
   protected def initiate(user: String): ScramInitiate[M]
 
-  protected def parseChallenge(resp: Response): Either[CommandError, ScramChallenge[M]]
+  protected def challengeReader: pack.Reader[ScramInitiate.Result[M]]
 
   protected def startNegociation(
     user: String,
@@ -103,14 +108,17 @@ private[reactivemongo] sealed trait MongoScramAuthentication[M <: Authentication
     randomPrefix: String,
     message: String): ScramStartNegociation[M]
 
-  protected def parseNegociation(resp: Response): ScramStartNegociation.ResType
-
   // ---
+
+  private lazy val initiateWriter = ScramInitiate.writer(pack, mechanism)
 
   protected final def sendAuthenticate(connection: Connection, nextAuth: Authenticate): Connection = {
     val start = initiate(nextAuth.user)
 
-    connection.send(start(nextAuth.db).maker(RequestIdGenerator.getNonce.next))
+    val (maker, _) = Command.buildRequestMaker(pack)(
+      start, initiateWriter, ReadPreference.primary, nextAuth.db)
+
+    connection.send(maker(RequestIdGenerator.getNonce.next))
 
     nextAuth.password match {
       case Some(password) => connection.copy(authenticating = Some(
@@ -124,9 +132,24 @@ private[reactivemongo] sealed trait MongoScramAuthentication[M <: Authentication
     }
   }
 
+  private lazy val negociationWriter =
+    ScramStartNegociation.writer[pack.type, M](pack)
+
+  private lazy val negociationReader =
+    ScramStartNegociation.reader(pack, mechanism)
+
+  private lazy val finalWriter = ScramFinalNegociation.writer(pack)
+
   protected val authReceive: Receive = {
     case resp: Response if RequestIdGenerator.getNonce accepts resp => {
-      parseChallenge(resp).fold(
+      val chaRes: ScramInitiate.Result[M] = try {
+        pack.readAndDeserialize(resp, challengeReader)
+      } catch {
+        case NonFatal(error) =>
+          Left(FailedAuthentication(pack)(error.getMessage, None, None))
+      }
+
+      chaRes.fold(
         { err =>
           val respTo = resp.header.responseTo
           val msg = s"Fails to process ${mechanism} nonce for $respTo"
@@ -158,8 +181,11 @@ private[reactivemongo] sealed trait MongoScramAuthentication[M <: Authentication
                     { err => handleAuthResponse(ns, resp)(Left(err)) },
                     { sig =>
                       ns.updateConnectionByChannelId(chanId) { con =>
-                        con.send(negociation(db).
-                          maker(RequestIdGenerator.authenticate.next)).
+                        val (maker, _) = Command.buildRequestMaker(pack)(
+                          negociation, negociationWriter,
+                          ReadPreference.primary, db)
+
+                        con.send(maker(RequestIdGenerator.authenticate.next)).
                           addListener(new OperationHandler(
                             { cause =>
                               error(s"Fails to send request after ${mechanism} nonce #${chanId}", cause)
@@ -195,10 +221,15 @@ private[reactivemongo] sealed trait MongoScramAuthentication[M <: Authentication
 
       debug(s"Got authenticated response #${chanId}!")
 
-      @inline def resp: Either[Either[CommandError, SuccessfulAuthentication], Array[Byte]] = parseNegociation(response) match {
-        case Left(err)             => Left(Left(err))
-        case Right(Left(authed))   => Left(Right(authed))
-        case Right(Right(payload)) => Right(payload)
+      @inline def resp: Either[Either[CommandError, SuccessfulAuthentication], Array[Byte]] = try {
+        pack.readAndDeserialize(response, negociationReader) match {
+          case Left(err)             => Left(Left(err))
+          case Right(Left(authed))   => Left(Right(authed))
+          case Right(Right(payload)) => Right(payload)
+        }
+      } catch {
+        case NonFatal(error) =>
+          Left(Left(FailedAuthentication(pack)(error.getMessage, None, None)))
       }
 
       updateNodeSet(s"ScramNegociation($mechanism, $chanId)") { ns =>
@@ -227,10 +258,11 @@ private[reactivemongo] sealed trait MongoScramAuthentication[M <: Authentication
                       Left(FailedAuthentication(pack)(msg, None, None)))
 
                   } else {
-                    val negociation = ScramFinalNegociation(cid, payload)
+                    val (maker, _) = Command.buildRequestMaker(pack)(
+                      ScramFinalNegociation(cid, payload), finalWriter,
+                      ReadPreference.primary, db)
 
-                    con.send(negociation(db).
-                      maker(RequestIdGenerator.authenticate.next)).
+                    con.send(maker(RequestIdGenerator.authenticate.next)).
                       addListener(new OperationHandler(
                         { e =>
                           error(s"Fails to negociate $mechanism #${chanId}", e)

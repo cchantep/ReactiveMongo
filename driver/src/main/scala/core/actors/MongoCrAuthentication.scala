@@ -3,9 +3,8 @@ package reactivemongo.core.actors
 import scala.util.control.NonFatal
 
 import reactivemongo.core.commands.{
-  CommandError,
-  FailedAuthentication,
-  SuccessfulAuthentication
+  AuthenticationResult,
+  FailedAuthentication
 }
 
 import reactivemongo.core.protocol.Response
@@ -16,7 +15,6 @@ import reactivemongo.core.nodeset.{
 }
 
 import reactivemongo.api.ReadPreference
-import reactivemongo.api.Serialization.{ internalSerializationPack => pack }
 import reactivemongo.api.commands.{ CrAuthenticate, Command, GetCrNonce }
 
 private[reactivemongo] trait MongoCrAuthentication { system: MongoDBSystem =>
@@ -98,22 +96,9 @@ private[reactivemongo] trait MongoCrAuthentication { system: MongoDBSystem =>
 
       debug(s"Got authenticated response #${chanId}! ${resp.getClass}")
 
-      def result: Either[CommandError, SuccessfulAuthentication] = try {
-        pack.readAndDeserialize(resp, crAuthReader) match {
-          case failed: FailedAuthentication =>
-            Left(failed)
-
-          case suc: SuccessfulAuthentication =>
-            Right(suc)
-        }
-      } catch {
-        case NonFatal(error) =>
-          error.printStackTrace()
-          Left(CommandError(pack)(error.getMessage, None, None))
-      }
-
       updateNodeSet(s"CrAuthentication($chanId)") {
-        handleAuthResponse(_, resp)(result)
+        handleAuthResponse(_, resp)(
+          AuthenticationResult.parse(pack, resp)(crAuthReader))
       }
 
       ()
