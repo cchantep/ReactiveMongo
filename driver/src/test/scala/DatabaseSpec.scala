@@ -22,12 +22,38 @@ final class DatabaseSpec(implicit protected val ee: ExecutionEnv)
 
   "Database" should {
     "be resolved from connection according the failover strategy" >> {
-      "successfully" in {
-        val fos = FailoverStrategy(FiniteDuration(50, "ms"), 20, _ * 2D)
+      "successfully" >> {
+        "with default options" in {
+          val fos = FailoverStrategy(FiniteDuration(50, "ms"), 20, _ * 2D)
 
-        Common.connection.database(Common.commonDb, fos).
-          map(_ => {}) must beTypedEqualTo({}).await(1, estTimeout(fos))
+          Common.connection.database(Common.commonDb, fos).
+            map(_ => {}) must beTypedEqualTo({}).await(1, estTimeout(fos))
 
+        }
+
+        "with max idle" in {
+          import reactivemongo.api.bson.BSONDocument
+
+          val options = reactivemongo.api.MongoConnectionOptions(
+            keepAlive = true,
+            sslEnabled = false,
+            maxIdleTimeMS = 8000,
+            appName = None,
+            readConcern = reactivemongo.api.ReadConcern.Majority)
+
+          val conn = driver.connect(Seq(Common.primaryHost), options)
+          val db = Await.result(
+            conn.flatMap(_.database(Common.commonDb)),
+            FiniteDuration(20, "seconds"))
+
+          db.name must beTypedEqualTo(Common.commonDb) and {
+            val coll = db.collection(s"foo${System identityHashCode conn}")
+
+            coll.find(BSONDocument("age" -> 29)).
+              one[BSONDocument] must beNone.await
+
+          }
+        } tag "wip"
       }
 
       "with failure" in {
